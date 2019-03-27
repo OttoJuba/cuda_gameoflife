@@ -1,30 +1,14 @@
-/**
- * A CUDA 2.0 Implementation of the Game of Life.
- *
- * Copyright (C) 2015 Alejandro Segovia
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *		    
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *				    
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- **/
-
 #include <cuda.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <unistd.h>
 
+
 #define BLOCK_SIDE 16
 
 typedef unsigned char ubyte;
+int writeArr[64][64];
 
 __device__ ubyte getat(ubyte* pboard, int nrows, int ncols, int x, int y)
 {
@@ -90,9 +74,9 @@ __global__ void simstep(int nrows, int ncols, ubyte* pCurrBoard, ubyte* pNewBoar
 
 void randomizeBoard(ubyte* pboard, int nrows, int ncols, float probability)
 {
-	for (int x = 0; x < ncols; x++)
+	for (int x = 0; x < ncols/2; x++)
 	{
-		for (int y = 0; y < nrows; y++)
+		for (int y = 0; y < nrows/2; y++)
 		{
 			float rnd = rand() / (float)RAND_MAX;
 			pboard[x * ncols + y] = (rnd >= probability)? 0x1 : 0x0;
@@ -115,8 +99,25 @@ void printBoard(const char* msg, ubyte* pboard, int nrows, int ncols)
 
 }
 
+void writeBoard(ubyte* pboard, int boardH, int boardW, int board[64][64])
+{
+
+	for (int x = 0; x < boardH; x++)
+	{
+		for (int y = 0; y < boardW; y++)
+		{
+			board[x][y] = (int)(pboard[x * boardW + y]? '0' : '1');		
+			//printf("%c ", pboard[x * ncols + y]? '0' : '1');
+		}
+	}
+
+}
+
 int main(int argc, char* argv[])
 {
+	FILE *fp;
+	fp = fopen("/home/otto/Documents/graphics/game-of-life/data.txt","r+");
+
 	int boardW = 64;
 	int boardH = 64;
 
@@ -160,19 +161,31 @@ int main(int argc, char* argv[])
 		else
 		{
 			pcurr = pDevBoard1;
+
 			pnext = pDevBoard0;
 		}
+		cudaMemcpy(pboard, pnext, boardH * boardW * sizeof(ubyte), cudaMemcpyDeviceToHost);
 
+		for (int i = 0; i < 24; i++) printf("\n");
+		printBoard(" ", pboard, boardH, boardW);
+		usleep(70000);
 		simstep<<<gridsize, blocksize>>>(boardH, boardW, pcurr, pnext);
+
+		writeBoard(pboard, boardH, boardW, writeArr);
+		fwrite(writeArr,1,sizeof(writeArr),fp);
+
 
 #ifdef PRINT_BOARDS
 		cudaMemcpy(pboard, pnext, boardH * boardW * sizeof(ubyte), cudaMemcpyDeviceToHost);
-		for (int i = 0; i < 24; i++) printf("\n");
+		for (int i = 0; i < 10; i++) printf("\n");
 		printBoard(" ", pboard, boardH, boardW);
 		//usleep(250000);
 #endif
 
+
+
 	}
+
 
 	struct timeval tf;
 	gettimeofday(&tf, NULL);
@@ -181,11 +194,14 @@ int main(int argc, char* argv[])
 
 	cudaMemcpy(pboard, pcurr, boardW * boardH * sizeof(ubyte), cudaMemcpyDeviceToHost);
 
+
+
 	printBoard("Resulting Board:", pboard, boardH, boardW);
 
 	cudaFree(pDevBoard0);
 	cudaFree(pDevBoard1);
 	free(pboard);
+	fclose(fp);
 
 	printf("%d generations in %f milliseconds\n", ngenerations, t);
 
