@@ -24,3 +24,4 @@ The fact that we can process each cell's next state in parallel, independent of 
 
 This program shows how to run the Game of Life on NVIDIA GPUs using CUDA 2.0.
 
+# gameoflife
